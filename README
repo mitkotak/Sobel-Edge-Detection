@@ -1,0 +1,17 @@
+*****MINI PROJECT MADE FOR PARALLEL PROGRAMMING LAB*****
+
+The code only works for images with '.pgm' extension.
+
+For MPI, in the main.c file, 
+1. From line 11 to line 23, sample image sizes are given. Select which image you want to use for edge detection and comment out the other two.
+2. From line 55 to line 57, input image file names are specified. Use the required files, and comment out the others.
+3. From line 115 to line 117, output image file names are specified. Use the required files, and comment out the others.
+
+For Cuda, in the main.cu file,
+1. In lines 18 and 19, sample image size is given. Change the value if you wish to use a different image.
+2. A function load_image is provided. Change the input image file name if you wish to use a different image. 
+3. A function save_image is provided. Change the output image file name if you wish to use a different image. 
+
+After several rounds of trial and error, we set the threshold value as 100, as it gave the most ideal result. It can be changed in line 26 of main.c.
+
+'pgmio.h' is a helper file to read and write the image.
