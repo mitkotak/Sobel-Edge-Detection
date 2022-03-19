@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <math.h>
 
+#ifdef __unix
+#define fopen_s(pFile,filename,mode) ((*(pFile))=fopen((filename),  (mode)))==NULL
+#endif
+
 #define MAXLINE 128
 
 void pgmread(char *filename, void *vx, int nx, int ny)
@@ -28,7 +32,7 @@ void pgmread(char *filename, void *vx, int nx, int ny)
   cret = fgets(dummy, n, fp);
   cret = fgets(dummy, n, fp);
 
-  iret = fscanf_s(fp,"%d %d",&nxt,&nyt);
+  iret = fscanf(fp,"%d %d",&nxt,&nyt); 
 
   if (nx != nxt || ny != nyt)
   {
@@ -38,13 +42,13 @@ void pgmread(char *filename, void *vx, int nx, int ny)
     exit(-1);
   }
 
-  iret = fscanf_s(fp,"%d",&i);
+  iret = fscanf(fp,"%d",&i);
 
   for (j=0; j<ny; j++)
   {
     for (i=0; i<nx; i++)
     {
-      iret = fscanf_s(fp,"%d", &t);
+      iret = fscanf(fp,"%d", &t);
       x[(ny-j-1)+ny*i] = t;
     }
   }
