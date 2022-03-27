@@ -10,7 +10,6 @@ void __syncthreads();
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <cuda.h>
-#include <helper_cuda.h>
 #include <device_functions.h>
 #include <cuda_runtime_api.h>
 #include <pgmio.h>
@@ -204,151 +203,26 @@ void call_kernel() {
 	printf("Blocks per grid (width): %d |", (WIDTH / BLOCK_W));
 	printf("Blocks per grid (height): %d |", (HEIGHT / BLOCK_H));
 
-	cudaStream_t streamForGraph;
-  	cudaGraph_t graph;
-  	std::vector<cudaGraphNode_t> nodeDependencies;
-  	
-	checkCudaErrors(cudaStreamCreate(&streamForGraph));
-	checkCudaErrors(cudaGraphCreate(&graph, 0));
-	  
-	cudaGraphNode_t memcpyNode;
-	cudaMemcpy3DParms memcpyParams = {0};
-
-	memcpyParams.srcArray = NULL;
-  	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
-  	memcpyParams.srcPtr =
-      make_cudaPitchedPtr(image, WIDTH, HEIGHT, 1);
-  	memcpyParams.dstArray = NULL;
-  	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
-  	memcpyParams.dstPtr =
-      make_cudaPitchedPtr(d_input, WIDTH, HEIGHT, 1);
-  	memcpyParams.extent = make_cudaExtent(WIDTH, HEIGHT, 1);
-  	memcpyParams.kind = cudaMemcpyHostToDevice;
-
-	checkCudaErrors(
-      cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
-	nodeDependencies.push_back(memcpyNode);
-
-	// cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
 
 	dim3 threads(BLOCK_W, BLOCK_H); // threads per block
 	dim3 blocks(WIDTH / BLOCK_W, HEIGHT / BLOCK_H); // blocks per grid 
-
-	cudaGraphNode_t kernelNode;
-	cudaKernelNodeParams kernelNodeParams = {0};
-
-	void *kernelArgs[4] = {d_input,d_output, WIDTH, HEIGHT};
-	kernelNodeParams.func = (void *)imageBlur;
- 	kernelNodeParams.gridDim = threads;
-  	kernelNodeParams.blockDim = blocks;
-  	kernelNodeParams.sharedMemBytes = 0;
- 	kernelNodeParams.kernelParams = (void **)kernelArgs;
- 	kernelNodeParams.extra = NULL;
   
-  	//imageBlur << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
-
-	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &kernelNodeParams));
-
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(kernelNode);
+  	imageBlur << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
   
-  	//cudaThreadSynchronize();
+  	cudaThreadSynchronize();
 
-	memcpyParams.srcArray = NULL;
-	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
-	memcpyParams.srcPtr = make_cudaPitchedPtr(d_input, memSize, 1, 1);
-	memcpyParams.dstArray = NULL;
-	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
-	memcpyParams.dstPtr = make_cudaPitchedPtr(&d_output, memSize, 1, 1);
-	memcpyParams.extent = make_cudaExtent(memSize, 1, 1);
-	memcpyParams.kind = cudaMemcpyDeviceToHost;
+  	cudaMemcpy(d_input, d_output, memSize, cudaMemcpyDeviceToHost);
 
-	checkCudaErrors(
-      cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &memcpyParams));
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(memcpyNode);
-    
-  	//cudaMemcpy(d_input, d_output, memSize, cudaMemcpyDeviceToHost);
+	gradient_horizontal<< <blocks, threads>> >(d_input, gradient_h_output, WIDTH, HEIGHT);
 
-	void *kernelArgs2[4] = {d_input, gradient_h_output, WIDTH, HEIGHT};
-	kernelNodeParams.func = (void *)gradient_horizontal;
- 	kernelNodeParams.gridDim = threads;
-  	kernelNodeParams.blockDim = blocks;
-  	kernelNodeParams.sharedMemBytes = 0;
- 	kernelNodeParams.kernelParams = (void **)kernelArgs2;
- 	kernelNodeParams.extra = NULL;
+	gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
 
-	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &kernelNodeParams));
+	sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT);
 
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(kernelNode);
+	cudaThreadSynchronize();
 
-	//gradient_horizontal<< <blocks, threads>> >(d_input, gradient_h_output, WIDTH, HEIGHT);
-
-	void *kernelArgs3[4] = {d_input, gradient_v_output, WIDTH, HEIGHT};
-	kernelNodeParams.func = (void *)gradient_vertical;
- 	kernelNodeParams.gridDim = threads;
-  	kernelNodeParams.blockDim = blocks;
-  	kernelNodeParams.sharedMemBytes = 0;
- 	kernelNodeParams.kernelParams = (void **)kernelArgs3;
- 	kernelNodeParams.extra = NULL;
-
-	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &kernelNodeParams));
-
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(kernelNode);
-
-	//gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
-
-	void *kernelArgs4[6] = {d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT};
-	kernelNodeParams.func = (void *)sobelFilter;
- 	kernelNodeParams.gridDim = threads;
-  	kernelNodeParams.blockDim = blocks;
-  	kernelNodeParams.sharedMemBytes = 0;
- 	kernelNodeParams.kernelParams = (void **)kernelArgs4;
- 	kernelNodeParams.extra = NULL;
-
-	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &kernelNodeParams));
-
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(kernelNode);
-
-	//sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT);
-
-	//cudaThreadSynchronize();
-
-	memcpyParams.srcArray = NULL;
-	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
-	memcpyParams.srcPtr = make_cudaPitchedPtr(final, memSize, 1, 1);
-	memcpyParams.dstArray = NULL;
-	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
-	memcpyParams.dstPtr = make_cudaPitchedPtr(&d_output, memSize, 1, 1);
-	memcpyParams.extent = make_cudaExtent(memSize, 1, 1);
-	memcpyParams.kind = cudaMemcpyDeviceToHost;
-
-	checkCudaErrors(
-      cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &memcpyParams));
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(memcpyNode);
-
-	//cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
-
-	cudaGraphExec_t graphExec;
-  	checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
-	checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
-	checkCudaErrors(cudaStreamSynchronize(streamForGraph));
-
-
+	cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
 
 	cudaError_t err = cudaGetLastError();
 	if (cudaSuccess != err)
@@ -357,9 +231,6 @@ void call_kernel() {
 		exit(EXIT_FAILURE);
 	}
 
-	checkCudaErrors(cudaGraphExecDestroy(graphExec));
-  	checkCudaErrors(cudaGraphDestroy(graph));
-  	checkCudaErrors(cudaStreamDestroy(streamForGraph));
 	cudaFree(d_input);
 	cudaFree(d_output);
 	cudaFree(gradient_h_output);
