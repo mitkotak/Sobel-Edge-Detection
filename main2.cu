@@ -16,8 +16,8 @@ void __syncthreads();
 #include <vector>
 
 // image dimensions WIDTH & HEIGHT
-#define WIDTH  1024
-#define HEIGHT 1024
+#define WIDTH  256
+#define HEIGHT 256
 
 // Block width WIDTH & HEIGHT
 #define BLOCK_W 16
@@ -41,8 +41,34 @@ float total, sobel;
 cudaEvent_t start_total, stop_total;
 cudaEvent_t start_sobel, stop_sobel;
 
+__global__ void imageBlur_horizontal(float *input, float *output, size_t width, size_t height) {
 
-__global__ void imageBlur(float *input, float *output, size_t width, size_t height) {
+	int col = threadIdx.x + blockIdx.x * blockDim.x;
+	int row = threadIdx.y + blockIdx.y * blockDim.y;
+
+	int numcols = WIDTH;
+
+	float blur;
+
+	if (row <= height && col <= width && row > 0 && col > 0)
+	{
+		// weights
+		int	x3, x4, x5;
+
+		// blur
+		// 0.2 0.2 0.2
+
+		x3 = input[row * numcols + (col - 1)];			// left
+		x4 = input[row * numcols + col];				// center
+		x5 = input[row * numcols + (col + 1)];			// right
+
+		blur =  (x3 * 0.2) + (x4 * 0.2) + (x5 * 0.2);
+
+		output[row * numcols + col] = blur;
+	}
+}
+
+__global__ void imageBlur_vertical(float *input, float *output, size_t width, size_t height) {
 	
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -54,9 +80,7 @@ __global__ void imageBlur(float *input, float *output, size_t width, size_t heig
 	if (row <= height && col <= width && row > 0 && col > 0)
 	{
 		// weights
-		int		x1,
-			x3, x4, x5,
-				x7;
+		int		x1,x7;
 
 		// blur
 		// 0.0 0.2 0.0
@@ -64,12 +88,9 @@ __global__ void imageBlur(float *input, float *output, size_t width, size_t heig
 		// 0.0 0.2 0.0
 
 		x1 = input[(row + 1) * numcols + col];			// up
-		x3 = input[row * numcols + (col - 1)];			// left
-		x4 = input[row * numcols + col];				// center
-		x5 = input[row * numcols + (col + 1)];			// right
 		x7 = input[(row + -1) * numcols + col];			// down
 
-		blur = (x1 * 0.2) + (x3 * 0.2) + (x4 * 0.2) + (x5 * 0.2) + (x7 * 0.2);
+		blur = (x1 * 0.2) + (x7 * 0.2);
 
 		output[row * numcols + col] = blur;
 	}
@@ -172,18 +193,14 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	}
 }
 
-__global__ void memcpy_2D_to_1D(float *input, float final[WIDTH][HEIGHT]){
-
-	memcpy(final, input, sizeof(input));	
-
-}
-
 void load_image() {
-	pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
+	pgmread("image512x512.pgm", (void *)image, WIDTH, HEIGHT);
 }
 
 void save_image() {
-	pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("pgmimg_output.pgm", (void *)final, WIDTH, HEIGHT);
+	pgmwrite("image-outputl512x512.pgm", (void *)final, WIDTH, HEIGHT);
 }
 
 void call_kernel() {
@@ -206,8 +223,11 @@ void call_kernel() {
 
 	dim3 threads(BLOCK_W, BLOCK_H); // threads per block
 	dim3 blocks(WIDTH / BLOCK_W, HEIGHT / BLOCK_H); // blocks per grid 
-  
-  	imageBlur << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
+	
+
+  	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
+
+	imageBlur_vertical << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
   
   	cudaThreadSynchronize();
 
@@ -221,9 +241,7 @@ void call_kernel() {
 
 	cudaThreadSynchronize();
 
-	// cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
-
-	memcpy_2D_to_1D << <blocks, threads >> > (d_output, final);
+	cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
 
 	cudaError_t err = cudaGetLastError();
 	if (cudaSuccess != err)
