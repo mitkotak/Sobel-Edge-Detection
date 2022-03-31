@@ -17,12 +17,12 @@ void __syncthreads();
 #include <vector>
 
 // image dimensions WIDTH & HEIGHT
-#define WIDTH 256
-#define HEIGHT 256
+#define WIDTH 1024
+#define HEIGHT 1024
 
 // Block width WIDTH & HEIGHT
-#define BLOCK_W 16
-#define BLOCK_H 16
+#define BLOCK_W 256
+#define BLOCK_H 256
 
 // buffer to read image into
 float image[HEIGHT][WIDTH];
@@ -43,7 +43,7 @@ cudaEvent_t start_total, stop_total;
 cudaEvent_t start_sobel, stop_sobel;
 
 
-__global__ void imageBlur(float *input, float *output, int width, int height) {
+__global__ void imageBlur(float *input, float *output, size_t width, size_t height) {
 	
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -77,7 +77,7 @@ __global__ void imageBlur(float *input, float *output, int width, int height) {
 }
 
 
-__global__ void gradient_horizontal(float *input, float *output, int width, int height) {
+__global__ void gradient_horizontal(float *input, float *output, size_t width, size_t height) {
 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -113,7 +113,7 @@ __global__ void gradient_horizontal(float *input, float *output, int width, int 
 }
 
 
-__global__ void gradient_vertical(float *input, float *output, int width, int height) {
+__global__ void gradient_vertical(float *input, float *output, size_t width, size_t height) {
 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -145,7 +145,7 @@ __global__ void gradient_vertical(float *input, float *output, int width, int he
 	
 }
 
-__global__ void sobelFilter(float *input, float *output, float *gradient_h_output, float *gradient_v_output, int width, int height) {
+__global__ void sobelFilter(float *input, float *output, float *gradient_h_output, float *gradient_v_output, size_t width, size_t height) {
 	
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -174,32 +174,33 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 }
 
 
+__global__ void memcpy_2D_to_1D(float *input, float *final[WIDTH][HEIGHT]){
+
+	memcpy(final, input, sizeof(input));	
+
+}
+
 void load_image() {
-	pgmread("image512x512.pgm", (void *)image, WIDTH, HEIGHT);
+	pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
 }
 
 void save_image() {
-	pgmwrite("image-outputl512x512.pgm", (void *)final, WIDTH, HEIGHT);
+	pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
 }
 
 void call_kernel() {
+	size_t width = WIDTH, height=HEIGHT;
 	int x, y;
 	float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
 
 	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
 
-	size_t memSize = WIDTH * HEIGHT * sizeof(float);
+	size_t memSize = WIDTH * HEIGHT;
 
 	cudaMalloc(&d_input, memSize);
 	cudaMalloc(&d_output, memSize);
 	cudaMalloc(&gradient_h_output, memSize);
 	cudaMalloc(&gradient_v_output, memSize);
-
-	for (y = 0; y < HEIGHT; y++) {
-		for (x = 0; x < WIDTH; x++) {
-			final[x][y] = 0.0;
-		}
-	}
 
 	printf("Blocks per grid (width): %d |", (WIDTH / BLOCK_W));
 	printf("Blocks per grid (height): %d |", (HEIGHT / BLOCK_H));
@@ -208,7 +209,6 @@ void call_kernel() {
   	cudaGraph_t graph;
   	std::vector<cudaGraphNode_t> nodeDependencies;
   	
-	checkCudaErrors(cudaStreamCreate(&streamForGraph));
 	checkCudaErrors(cudaGraphCreate(&graph, 0));
 	  
 	cudaGraphNode_t memcpyNode;
@@ -217,12 +217,12 @@ void call_kernel() {
 	memcpyParams.srcArray = NULL;
   	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
   	memcpyParams.srcPtr =
-      make_cudaPitchedPtr(image, WIDTH, HEIGHT, 1);
+      make_cudaPitchedPtr(image, memSize, 1, 1);
   	memcpyParams.dstArray = NULL;
   	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
   	memcpyParams.dstPtr =
-      make_cudaPitchedPtr(d_input, WIDTH, HEIGHT, 1);
-  	memcpyParams.extent = make_cudaExtent(WIDTH, HEIGHT, 1);
+      make_cudaPitchedPtr(d_input, memSize, 1, 1);
+  	memcpyParams.extent = make_cudaExtent(memSize, 1, 1);
   	memcpyParams.kind = cudaMemcpyHostToDevice;
 
 	checkCudaErrors(
@@ -237,7 +237,7 @@ void call_kernel() {
 	cudaGraphNode_t kernelNode;
 	cudaKernelNodeParams kernelNodeParams = {0};
 
-	void *kernelArgs[4] = {d_input,d_output, WIDTH, HEIGHT};
+	void* kernelArgs[4] = {(void *)&d_input,(void *)&d_output, &width, &height};
 	kernelNodeParams.func = (void *)imageBlur;
  	kernelNodeParams.gridDim = threads;
   	kernelNodeParams.blockDim = blocks;
@@ -273,7 +273,7 @@ void call_kernel() {
     
   	//cudaMemcpy(d_input, d_output, memSize, cudaMemcpyDeviceToHost);
 
-	void *kernelArgs2[4] = {d_input, gradient_h_output, WIDTH, HEIGHT};
+	void* kernelArgs2[4] = {(void *)&d_input, (void *)&gradient_h_output, &width, &height};
 	kernelNodeParams.func = (void *)gradient_horizontal;
  	kernelNodeParams.gridDim = threads;
   	kernelNodeParams.blockDim = blocks;
@@ -290,7 +290,7 @@ void call_kernel() {
 
 	//gradient_horizontal<< <blocks, threads>> >(d_input, gradient_h_output, WIDTH, HEIGHT);
 
-	void *kernelArgs3[4] = {d_input, gradient_v_output, WIDTH, HEIGHT};
+	void* kernelArgs3[4] = {(void *)&d_input,(void *)& gradient_v_output, &width, &height};
 	kernelNodeParams.func = (void *)gradient_vertical;
  	kernelNodeParams.gridDim = threads;
   	kernelNodeParams.blockDim = blocks;
@@ -307,7 +307,7 @@ void call_kernel() {
 
 	//gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
 
-	void *kernelArgs4[6] = {d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT};
+	void* kernelArgs4[6] = {(void *)&d_input, (void *)&d_output, (void *)&gradient_h_output, (void *)&gradient_v_output, &width, &height};
 	kernelNodeParams.func = (void *)sobelFilter;
  	kernelNodeParams.gridDim = threads;
   	kernelNodeParams.blockDim = blocks;
@@ -325,30 +325,42 @@ void call_kernel() {
 	//sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT);
 
 	//cudaThreadSynchronize();
+	  
+	//cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
+	// memcpyParams.srcArray = NULL;
+	// memcpyParams.srcPos = make_cudaPos(0, 0, 0);
+	// memcpyParams.srcPtr = make_cudaPitchedPtr(&d_output, memSize, 1, 1);
+	// memcpyParams.dstArray = NULL;
+	// memcpyParams.dstPos = make_cudaPos(0, 0, 0);
+	// memcpyParams.dstPtr = make_cudaPitchedPtr(&final, HEIGHT, WIDTH, 1);
+	// memcpyParams.extent = make_cudaExtent(HEIGHT, WIDTH, 1);
+	// memcpyParams.kind = cudaMemcpyDeviceToHost;
 
-	memcpyParams.srcArray = NULL;
-	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
-	memcpyParams.srcPtr = make_cudaPitchedPtr(final, memSize, 1, 1);
-	memcpyParams.dstArray = NULL;
-	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
-	memcpyParams.dstPtr = make_cudaPitchedPtr(&d_output, memSize, 1, 1);
-	memcpyParams.extent = make_cudaExtent(memSize, 1, 1);
-	memcpyParams.kind = cudaMemcpyDeviceToHost;
+	// checkCudaErrors(
+    //   cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(),
+    //                          nodeDependencies.size(), &memcpyParams));
+  	// nodeDependencies.clear();
+  	// nodeDependencies.push_back(memcpyNode);
+	void* kernelArgs5[2] = {(void *)&d_input, (void *)&final};
+	kernelNodeParams.func = (void *)memcpy_2D_to_1D;
+ 	kernelNodeParams.gridDim = threads;
+  	kernelNodeParams.blockDim = blocks;
+  	kernelNodeParams.sharedMemBytes = 0;
+ 	kernelNodeParams.kernelParams = (void **)kernelArgs5;
+ 	kernelNodeParams.extra = NULL;
 
 	checkCudaErrors(
-      cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(),
-                             nodeDependencies.size(), &memcpyParams));
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(memcpyNode);
+    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(),
+                             nodeDependencies.size(), &kernelNodeParams));
 
-	//cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
+  	nodeDependencies.clear();
+  	nodeDependencies.push_back(kernelNode);
+	
+	printf("Executing Graph");
 
 	cudaGraphExec_t graphExec;
   	checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
-	checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
-	checkCudaErrors(cudaStreamSynchronize(streamForGraph));
-
-
+	checkCudaErrors(cudaStreamSynchronize(0));
 
 	cudaError_t err = cudaGetLastError();
 	if (cudaSuccess != err)
@@ -359,7 +371,6 @@ void call_kernel() {
 
 	checkCudaErrors(cudaGraphExecDestroy(graphExec));
   	checkCudaErrors(cudaGraphDestroy(graph));
-  	checkCudaErrors(cudaStreamDestroy(streamForGraph));
 	cudaFree(d_input);
 	cudaFree(d_output);
 	cudaFree(gradient_h_output);
