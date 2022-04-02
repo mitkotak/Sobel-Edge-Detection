@@ -10,6 +10,7 @@ void __syncthreads();
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <cuda.h>
+#include <helper_cuda.h>
 #include <device_functions.h>
 #include <cuda_runtime_api.h>
 #include <pgmio.h>
@@ -20,20 +21,20 @@ void __syncthreads();
 #define HEIGHT 256
 
 // Block width WIDTH & HEIGHT
-#define BLOCK_W 16
-#define BLOCK_H 16
+#define BLOCK_W 32
+#define BLOCK_H 32
 
 // buffer to read image into
-float image[HEIGHT][WIDTH];
+// float image[HEIGHT][WIDTH];
 
 // buffer for resulting image
 float final[HEIGHT][WIDTH];
 
 // prototype declarations
 
-void load_image();
-void call_kernel();
-void save_image();
+void load_image(float *image);
+void call_kernel(float *image, float *final);
+void save_image(float *final);
 
 #define MAXLINE 128
 
@@ -41,7 +42,7 @@ float total, sobel;
 cudaEvent_t start_total, stop_total;
 cudaEvent_t start_sobel, stop_sobel;
 
-__global__ void imageBlur_horizontal(float *input, float *output, size_t width, size_t height) {
+__global__ void imageBlur_horizontal(float *input, float *output, int width, int height) {
 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -68,7 +69,7 @@ __global__ void imageBlur_horizontal(float *input, float *output, size_t width, 
 	}
 }
 
-__global__ void imageBlur_vertical(float *input, float *output, size_t width, size_t height) {
+__global__ void imageBlur_vertical(float *input, float *output, int width, int height) {
 	
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -97,7 +98,7 @@ __global__ void imageBlur_vertical(float *input, float *output, size_t width, si
 }
 
 
-__global__ void gradient_horizontal(float *input, float *output, size_t width, size_t height) {
+__global__ void gradient_horizontal(float *input, float *output, int width, int height) {
 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -133,7 +134,7 @@ __global__ void gradient_horizontal(float *input, float *output, size_t width, s
 }
 
 
-__global__ void gradient_vertical(float *input, float *output, size_t width, size_t height) {
+__global__ void gradient_vertical(float *input, float *output, int width, int height) {
 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -165,7 +166,7 @@ __global__ void gradient_vertical(float *input, float *output, size_t width, siz
 	
 }
 
-__global__ void sobelFilter(float *input, float *output, float *gradient_h_output, float *gradient_v_output, size_t width, size_t height) {
+__global__ void sobelFilter(float *input, float *output, float *gradient_h_output, float *gradient_v_output, int width, int height) {
 	
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -193,23 +194,36 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	}
 }
 
-void load_image() {
-	// pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
+void load_image(float *image) {
+	// pgmread("image100000x100000.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("image16384x16384.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("image10000x10000.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("image4096x4096.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("image2048x2048.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmwrite("image1024x1024.pgm", (void *)image, WIDTH, HEIGHT);
 	pgmread("image512x512.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
 }
 
-void save_image() {
-	// pgmwrite("pgmimg_output.pgm", (void *)final, WIDTH, HEIGHT);
-	pgmwrite("image-outputl512x512.pgm", (void *)final, WIDTH, HEIGHT);
+void save_image(float *final) {
+	// pgmwrite("image-outputl100000x100000.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("image-outputl16384x16384.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("image-outputl10000x10000.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("image-outputl4096x4096.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("image-outputl2048x2048.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("image-outputl1024x1024.pgm", (void *)final, WIDTH, HEIGHT);
+	pgmwrite("image-output_ng_512x512.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
 }
 
-void call_kernel() {
+void call_kernel(float *image, float *final) {
+	int width = WIDTH, height=HEIGHT;
 	int x, y;
 	float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
 
 	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
 
-	size_t memSize = WIDTH * HEIGHT;
+	float memSize = WIDTH * HEIGHT * sizeof(float);
 
 	cudaMalloc(&d_input, memSize);
 	cudaMalloc(&d_output, memSize);
@@ -217,30 +231,30 @@ void call_kernel() {
 	cudaMalloc(&gradient_v_output, memSize);
 
 	printf("Blocks per grid (width): %d |", (WIDTH / BLOCK_W));
-	printf("Blocks per grid (height): %d |", (HEIGHT / BLOCK_H));
+	printf("Blocks per grid (height): %d \n", (HEIGHT / BLOCK_H));
 
 	cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
 
 	dim3 threads(BLOCK_W, BLOCK_H); // threads per block
 	dim3 blocks(WIDTH / BLOCK_W, HEIGHT / BLOCK_H); // blocks per grid 
 	
-
+	// printf("Launching imageBlur_horizontal \n");
   	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
-
+	// printf("Launching imageBlur_vertical \n");
 	imageBlur_vertical << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
   
   	cudaThreadSynchronize();
-
+	// printf("Copying data to device \n");
   	cudaMemcpy(d_input, d_output, memSize, cudaMemcpyDeviceToHost);
-
+	// printf("Launching gradient_horizontal \n");
 	gradient_horizontal<< <blocks, threads>> >(d_input, gradient_h_output, WIDTH, HEIGHT);
-
+	// printf("Launching gradient_vertical \n");
 	gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
-
+	// printf("Launching sobelFilter \n");	
 	sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT);
 
 	cudaThreadSynchronize();
-
+	// printf("Copying data back to host \n");
 	cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
 
 	cudaError_t err = cudaGetLastError();
@@ -251,6 +265,7 @@ void call_kernel() {
 	}
 
 	cudaFree(d_input);
+	cudaFree(d_input);
 	cudaFree(d_output);
 	cudaFree(gradient_h_output);
 	cudaFree(gradient_v_output);
@@ -258,6 +273,11 @@ void call_kernel() {
 
 int main(int argc, char *argv[])
 {
+  float *image = NULL, *final = NULL;
+  size_t memSize = WIDTH * HEIGHT * sizeof(float);
+  checkCudaErrors((cudaMallocHost(&image, memSize)));
+  checkCudaErrors((cudaMallocHost(&final, memSize)));
+
   cudaEventCreate(&start_total);
   cudaEventCreate(&stop_total);
     
@@ -266,25 +286,25 @@ int main(int argc, char *argv[])
     
   cudaEventRecord(start_total, 0);
 
-	load_image();
+  load_image(image);
    
   cudaEventRecord(start_sobel, 0);
 
-	call_kernel();
+  call_kernel(image,final);
   
   cudaEventRecord(stop_sobel, 0);
   cudaEventSynchronize(stop_sobel);
   cudaEventElapsedTime(&sobel, start_sobel, stop_sobel);
 
-	save_image();
+  save_image(final);
    
   cudaEventRecord(stop_total, 0);
   cudaEventSynchronize(stop_total);
   cudaEventElapsedTime(&total, start_total, stop_total);
     
-  printf("Total Parallel Time:  %f s |", sobel/1000);
-  printf("Total Serial Time:  %f s |", (total-sobel)/1000);
-  printf("Total Time:  %f s |", total/1000);
+  printf("Total Parallel Time:  %f s \n", sobel/1000);
+  printf("Total Serial Time:  %f s \n", (total-sobel)/1000);
+  printf("Total Time:  %f s \n", total/1000);
   
     
 	cudaDeviceReset();
