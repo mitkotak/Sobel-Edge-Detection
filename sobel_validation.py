@@ -23,7 +23,7 @@ def readpgm(name):
 
 
 # Load input image
-input_user = readpgm('image512x512.pgm')
+input_user = readpgm('../images/image512x512.pgm')
 
 user_img = np.reshape(input_user[0],input_user[1])
 
@@ -40,11 +40,11 @@ Kx = a1.T * a2
 Ky = a2.T * a1
 
 # Apply the Sobel operator
-Gx = convolve2d(user_img, Kx, "same", "symm")
-Gy = convolve2d(user_img, Ky, "same", "symm")
-G = np.sqrt(Gx**2 + Gy**2)
+Gx = convolve2d(user_img, Kx, "same", "symm",fillvalue=0)
+Gy = convolve2d(user_img, Ky, "same", "symm",fillvalue=0)
+G = np.sqrt(Gx*Gx + Gy*Gy)
 
-input_kernel = readpgm('image-outputl512x512.pgm')
+input_kernel = readpgm('../images/image-output_ng_512x512.pgm')
 kernel_img = np.reshape(input_kernel[0],input_kernel[1])
 
 plt.imshow(kernel_img)
