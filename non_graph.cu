@@ -28,7 +28,7 @@ void __syncthreads();
 // float image[HEIGHT][WIDTH];
 
 // buffer for resulting image
-float final[HEIGHT][WIDTH];
+// float final[HEIGHT][WIDTH];
 
 // prototype declarations
 
@@ -199,9 +199,9 @@ void load_image(float *image) {
 	// pgmread("image16384x16384.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("image10000x10000.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("image4096x4096.pgm", (void *)image, WIDTH, HEIGHT);
-	// pgmread("image2048x2048.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("../images/rabbit2000x3000.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmwrite("image1024x1024.pgm", (void *)image, WIDTH, HEIGHT);
-	pgmread("image512x512.pgm", (void *)image, WIDTH, HEIGHT);
+	pgmread("../images/image512x512.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
 }
 
@@ -210,7 +210,7 @@ void save_image(float *final) {
 	// pgmwrite("image-outputl16384x16384.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl10000x10000.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl4096x4096.pgm", (void *)final, WIDTH, HEIGHT);
-	// pgmwrite("image-outputl2048x2048.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("../images/image-output_ng_2000x3000.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl1024x1024.pgm", (void *)final, WIDTH, HEIGHT);
 	pgmwrite("image-output_ng_512x512.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);

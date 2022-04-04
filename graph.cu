@@ -38,7 +38,6 @@ float total, sobel;
 cudaEvent_t start_total, stop_total;
 cudaEvent_t start_sobel, stop_sobel;
 
-
 __global__ void imageBlur_horizontal(float *input, float *output, size_t width, size_t height) {
 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
@@ -196,9 +195,10 @@ void load_image(float *image) {
 	// pgmread("image16384x16384.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("image10000x10000.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("image4096x4096.pgm", (void *)image, WIDTH, HEIGHT);
-	// pgmread("image2048x2048.pgm", (void *)image, WIDTH, HEIGHT);
-	// pgmread("image1024x1024.pgm", (void *)image, WIDTH, HEIGHT);
-	pgmread("image512x512.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("../images/rabbit2000x3000.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("../images/image2048x2048.pgm", (void *)image, WIDTH, HEIGHT);
+	// pgmread("../images/image1024x1024.pgm", (void *)image, WIDTH, HEIGHT);
+	pgmread("../images/image512x512.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
 }
 
@@ -207,9 +207,10 @@ void save_image(float *final) {
 	// pgmwrite("image-outputl16384x16384.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl10000x1000.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl4096x4096.pgm", (void *)final, WIDTH, HEIGHT);
-	// pgmwrite("image-outputl2048x2048.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("../images/image-output_g_2048x2048.pgm", (void *)final, WIDTH, HEIGHT);
+	// pgmwrite("../images/rabbit_g_2000x3000.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl1024x1024.pgm", (void *)final, WIDTH, HEIGHT);
-	pgmwrite("image-output_g_512x512.pgm", (void *)final, WIDTH, HEIGHT);
+	pgmwrite("../images/image-output_g_512x512.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
 }
 
@@ -230,7 +231,7 @@ void call_kernel(float *image, float *final, int devID) {
 
 	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
 
-	size_t memSize = WIDTH * HEIGHT;
+	size_t memSize = WIDTH * HEIGHT * sizeof(float);
 
 	checkCudaErrors(cudaMalloc(&d_input, memSize));
 	checkCudaErrors(cudaMalloc(&d_output, memSize));
@@ -263,7 +264,7 @@ void call_kernel(float *image, float *final, int devID) {
 	memcpyParams.srcArray = NULL;
   	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
   	memcpyParams.srcPtr =
-      make_cudaPitchedPtr(&image, memSize, 1, 1);
+      make_cudaPitchedPtr(image, memSize, 1, 1);
   	memcpyParams.dstArray = NULL;
   	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
   	memcpyParams.dstPtr =
@@ -273,6 +274,9 @@ void call_kernel(float *image, float *final, int devID) {
 
 	checkCudaErrors(
       cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
+	// checkCudaErrors(
+	//   cudaGraphAddMemcpyNode1D(&memcpyNode, graph, NULL, 0,
+	//    (void *)d_input, (void *)image, memSize, cudaMemcpyHostToDevice)); 
 	nodeDependencies.push_back(memcpyNode);
 
 	// cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
@@ -291,7 +295,7 @@ void call_kernel(float *image, float *final, int devID) {
  	kernelNodeParams.kernelParams = (void **)kernelArgs0;
  	kernelNodeParams.extra = NULL;
   
-  	//imageBlur << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
+  	// //imageBlur << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
 
 	checkCudaErrors(
     cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(),
@@ -370,7 +374,8 @@ void call_kernel(float *image, float *final, int devID) {
   	nodeDependencies.clear();
   	nodeDependencies.push_back(kernelNode);
 
-	//gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
+	// gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
+
 	cudaKernelNodeParams kernelNodeParams4 = {0};
 	void* kernelArgs4[6] = {(void *)&d_input, (void *)&d_output, (void *)&gradient_h_output, (void *)&gradient_v_output, &width, &height};
 	kernelNodeParams4.func = (void *)sobelFilter;
@@ -389,14 +394,14 @@ void call_kernel(float *image, float *final, int devID) {
 
 	//sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT);
 
-	//cudaThreadSynchronize();
+	cudaThreadSynchronize();
 	cudaMemcpy3DParms memcpyParams2 = {0};
 	memcpyParams2.srcArray = NULL;
 	memcpyParams2.srcPos = make_cudaPos(0, 0, 0);
 	memcpyParams2.srcPtr = make_cudaPitchedPtr(d_output, memSize, 1, 1);
 	memcpyParams2.dstArray = NULL;
 	memcpyParams2.dstPos = make_cudaPos(0, 0, 0);
-	memcpyParams2.dstPtr = make_cudaPitchedPtr(&final, memSize, 1, 1);
+	memcpyParams2.dstPtr = make_cudaPitchedPtr(final, memSize, 1, 1);
 	memcpyParams2.extent = make_cudaExtent(memSize, 1, 1);
 	memcpyParams2.kind = cudaMemcpyDeviceToHost;
 
