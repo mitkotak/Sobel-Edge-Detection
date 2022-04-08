@@ -30,11 +30,6 @@ void __syncthreads();
 // buffer for resulting image
 // float final[HEIGHT][WIDTH];
 
-// prototype declarations
-
-void load_image(float *image);
-void call_kernel(float *image, float *final);
-void save_image(float *final);
 
 #define MAXLINE 128
 
@@ -201,8 +196,7 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	}
 }
 
-void load_image(float *image) {
-	pgmread("../images/apollonian_gasket.ascii.pgm", (void *)image, WIDTH, HEIGHT);
+	
 	// pgmread("image100000x100000.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("../images/image20000x20000.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("../images/image16384x16384.pgm", (void *)image, WIDTH, HEIGHT);
@@ -213,10 +207,7 @@ void load_image(float *image) {
 	// pgmwrite("../images/image1024x1024.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("../images/image512x512.pgm", (void *)image, WIDTH, HEIGHT);
 	// pgmread("pgmimg.pgm", (void *)image, WIDTH, HEIGHT);
-}
 
-void save_image(float *final) {
-	pgmwrite("../images/image-output_ng_apollonian_gasket.ascii.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-outputl100000x100000.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("image-output_ng_20000x20000.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("../images/image-output_ng_16384x16384.pgm", (void *)final, WIDTH, HEIGHT);
@@ -227,16 +218,31 @@ void save_image(float *final) {
 	// pgmwrite("../images/image-output_ng_1024x1024.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("../images/image-output_ng_512x512.pgm", (void *)final, WIDTH, HEIGHT);
 	// // pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
-}
 
-void call_kernel(float *image, float *final) {
-	int width = WIDTH, height=HEIGHT;
+
+int main(int argc, char *argv[])
+{ int width = 600, height=600;
+  float *image = NULL, *final = NULL;
+  size_t memSize = width * height * sizeof(float);
+  checkCudaErrors((cudaMallocHost(&image, memSize)));
+  checkCudaErrors((cudaMallocHost(&final, memSize)));
+
+  // read image 
+  pgmread("../images/test_images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
+  cudaEventCreate(&start_total);
+  cudaEventCreate(&stop_total);
+  cudaEventRecord(start_total, 0);
+
 	int x, y;
 	float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
 
 	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
 
-	float memSize = WIDTH * HEIGHT * sizeof(float);
+	printf("Blocks per grid (width): %d |", (width / BLOCK_W));
+	printf("Blocks per grid (height): %d \n", (height / BLOCK_H));
+	
+	dim3 threads(BLOCK_W, BLOCK_H); // threads per block
+	dim3 blocks(width / BLOCK_W, height / BLOCK_H); // blocks per grid 
 
 	warm_up_gpu << <blocks, threads >> > ();
 
@@ -250,13 +256,7 @@ void call_kernel(float *image, float *final) {
 
 	cudaEventRecord(start_sobel, 0);
 
-	printf("Blocks per grid (width): %d |", (WIDTH / BLOCK_W));
-	printf("Blocks per grid (height): %d \n", (HEIGHT / BLOCK_H));
-
 	cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
-
-	dim3 threads(BLOCK_W, BLOCK_H); // threads per block
-	dim3 blocks(WIDTH / BLOCK_W, HEIGHT / BLOCK_H); // blocks per grid 
 	
 	// printf("Launching imageBlur_horizontal \n");
   	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
@@ -294,26 +294,8 @@ void call_kernel(float *image, float *final) {
 	cudaFree(d_output);
 	cudaFree(gradient_h_output);
 	cudaFree(gradient_v_output);
-}
 
-int main(int argc, char *argv[])
-{
-  float *image = NULL, *final = NULL;
-  size_t memSize = WIDTH * HEIGHT * sizeof(float);
-  checkCudaErrors((cudaMallocHost(&image, memSize)));
-  checkCudaErrors((cudaMallocHost(&final, memSize)));
-
-  cudaEventCreate(&start_total);
-  cudaEventCreate(&stop_total);
-    
-    
-  cudaEventRecord(start_total, 0);
-
-  load_image(image);
-
-  call_kernel(image,final);
-
-  save_image(final);
+ 
    
   cudaEventRecord(stop_total, 0);
   cudaEventSynchronize(stop_total);
@@ -321,6 +303,8 @@ int main(int argc, char *argv[])
 
   printf("Total Time:  %f s \n", total/1000);
   
+  // write image
+  pgmwrite("../images/image-output_g_apollonian_gasket.ascii.pgm", (void *)final,width, height);
     
 	cudaDeviceReset();
 	

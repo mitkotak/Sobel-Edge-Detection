@@ -5,10 +5,10 @@
 void main()
 {
     int i, j, temp = 0;
-    int width = 1024, height = 1024;
+    int width = 20000, height = 20000;
   
     FILE* pgmimg;
-    pgmimg = fopen("pgmimg.pgm", "wb");
+    pgmimg = fopen("../images/image20000x20000.pgm", "wb");
   
     // Writing Magic Number to the File
     fprintf(pgmimg, "P2\n"); 
@@ -22,7 +22,7 @@ void main()
     int count = 0;
     for (i = 0; i < height; i++) {
         for (j = 0; j < width; j++) {
-            temp = 50;
+            temp = (i + j) % 255;
             // Writing the gray values in the 2D array to the file
             fprintf(pgmimg, "%d ", temp);
         }

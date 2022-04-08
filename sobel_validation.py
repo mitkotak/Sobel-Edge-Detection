@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import convolve2d
 import matplotlib.pyplot as plt
+import numpy.linalg as la
 
 def readpgm(name):
     with open(name) as f:
@@ -62,9 +63,11 @@ class sobel_edge_detector:
         # plt.imsave(img_save_name, self.image)
 
 # Load input image
-input_user = readpgm('../images/image512x512.pgm')
+input_user = readpgm('../images/test_images/apollonian_gasket.ascii.pgm')
 
 user_img = np.reshape(input_user[0],input_user[1])
+plt.imshow(user_img)
+plt.savefig("user.png")
 
 # Prepare the image blur matrix
 b1 = np.array([[0.0,0.2,0.0],[0.2,0.2,0.2],[0.0,0.2,0.0]])
@@ -87,37 +90,42 @@ G = img.detect_edges()
 # G = np.sqrt(Gx*Gx + Gy*Gy)
 
 # Rotate the image
+# Flip the image Left-Right
+from PIL import Image
+from PIL import ImageOps
+
 import scipy.ndimage as ndimage
 
 angle = 90 # in degrees
 
 rotated_G = ndimage.rotate(G, angle, reshape=True)
 
-# Flip the image Left-Right
-from PIL import Image
-from PIL import ImageOps
-
 im = Image.fromarray(rotated_G)
 
 im = ImageOps.mirror(im)
 
-im = np.asarray(im)
+im = np.asarray(im).astype(np.int32)
 
 im_bool = im > 30
 
-plt.imshow(im_bool*255*np.ones(im.shape))
+theoretical_img = im_bool*255*np.ones(im.shape)
+plt.imshow(theoretical_img)
 
 
 plt.savefig("theoretical.png")
 
-input_kernel = readpgm('../images/image-output_ng_512x512.pgm')
-kernel_img = np.reshape(input_kernel[0],input_kernel[1])
+input_kernel = readpgm('../images/test_images/image-output_apollonian_gasket.ascii.pgm')
+kernel_ng_img = np.reshape(input_kernel[0],input_kernel[1])
 
-plt.imshow(kernel_img)
+plt.imshow(kernel_ng_img)
 plt.savefig("kernel_ng.png")
 
-input_kernel = readpgm('../images/image-output_g_512x512.pgm')
-kernel_img = np.reshape(input_kernel[0],input_kernel[1])
+input_kernel = readpgm('../images/test_images/image-output_g_apollonian_gasket.ascii.pgm')
+kernel_g_img = np.reshape(input_kernel[0],input_kernel[1])
 
-plt.imshow(kernel_img)
+plt.imshow(kernel_g_img)
 plt.savefig("kernel_g.png")
+
+print("2 norm of graph and non-graph ",la.norm(kernel_g_img - kernel_ng_img,2))
+print("2 norm of graph and theoretical ",la.norm(kernel_g_img - theoretical_img,2))
+print("2 norm of non-graph and theoretical ",la.norm(kernel_ng_img - theoretical_img,2))
