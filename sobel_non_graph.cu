@@ -17,14 +17,11 @@ void __syncthreads();
 #include <vector>
 
 // image dimensions WIDTH & HEIGHT
-#define WIDTH 600
-#define HEIGHT 600
+#define NIMAGES 128
 
 // Block width WIDTH & HEIGHT
 #define BLOCK_W 10
 #define BLOCK_H 10
-
-#define IMAGES 4
 
 // buffer to read image into
 // float image[HEIGHT][WIDTH];
@@ -51,7 +48,7 @@ __global__ void imageBlur_horizontal(float *input, float *output, int width, int
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
 
-	int numcols = WIDTH;
+	int numcols = width;
 
 	float blur;
 
@@ -78,7 +75,7 @@ __global__ void imageBlur_vertical(float *input, float *output, int width, int h
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
 
-	int numcols = WIDTH;
+	int numcols = width;
 
 	float blur;
 
@@ -107,7 +104,7 @@ __global__ void gradient_horizontal(float *input, float *output, int width, int 
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
 
-	int numcols = WIDTH;
+	int numcols = width;
 
 
 	// horizontal
@@ -143,7 +140,7 @@ __global__ void gradient_vertical(float *input, float *output, int width, int he
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
 
-	int numcols = WIDTH;
+	int numcols = width;
 
 	// vertical 
 	// -1 -2 -1
@@ -175,7 +172,7 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
 
-	int numcols = WIDTH;
+	int numcols = width;
 
 	float gradient,gradient_h,gradient_v;	
 	float thresh = 30;	
@@ -221,29 +218,45 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	// pgmwrite("../images/image-output_ng_512x512.pgm", (void *)final, WIDTH, HEIGHT);
 	// // pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
 
-
 int main(int argc, char *argv[])
-{ int width = 600, height=600;
-  float *image = NULL, *final = NULL;
-  float *image2 = NULL, *final2 = NULL;
+{ 	int width = 600, height=600;
 
-  size_t memSize = width * height * sizeof(float);
-  checkCudaErrors((cudaMallocHost(&image, memSize)));
-  checkCudaErrors((cudaMallocHost(&final, memSize)));
+	size_t memSize = width * height * sizeof(float);
+	float *image_array[NIMAGES];
+	float *final_array[NIMAGES];
+	float *d_input_array[NIMAGES];
+	float *d_output_array[NIMAGES];
+	float *gradient_h_output_array[NIMAGES];
+	float *gradient_v_output_array[NIMAGES];
 
- checkCudaErrors((cudaMallocHost(&image2, memSize)));
-  checkCudaErrors((cudaMallocHost(&final2, memSize)));
+	for (int i=1; i <= NIMAGES; i++){
+		float *image = NULL;
+		checkCudaErrors((cudaMallocHost(&image, memSize)));
+		pgmread("images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
+		image_array[i] = image;
+		
+		float *final = NULL;
+		checkCudaErrors((cudaMallocHost(&final, memSize)));
+		final_array[i] = final;
+		
+		float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
 
-  // read image 
-  pgmread("../images/test_images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
-  pgmread("../images/test_images/apollonian_gasket.ascii.pgm", (void *)image2, width, height);
+		checkCudaErrors(cudaMalloc(&d_input, memSize));
+		checkCudaErrors(cudaMalloc(&d_output, memSize));
+		checkCudaErrors(cudaMalloc(&gradient_h_output, memSize));
+		checkCudaErrors(cudaMalloc(&gradient_v_output, memSize));
+
+		d_input_array[i] = d_input;
+		d_output_array[i] = d_output;
+		gradient_h_output_array[i] = gradient_h_output;
+		gradient_v_output_array[i] = gradient_v_output;
+
+	}
+
   cudaEventCreate(&start_total);
   cudaEventCreate(&stop_total);
   cudaEventRecord(start_total, 0);
 
-	int x, y;
-	float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
-	float *d_input2, *d_output2, *gradient_h_output2, *gradient_v_output2;
 
 	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
 
@@ -255,66 +268,55 @@ int main(int argc, char *argv[])
 
 	warm_up_gpu << <blocks, threads >> > ();
 
-	cudaMalloc(&d_input, memSize);
-	cudaMalloc(&d_output, memSize);
-	cudaMalloc(&gradient_h_output, memSize);
-	cudaMalloc(&gradient_v_output, memSize);
+	float avg_sobel = 0.0;
 
-	cudaMalloc(&d_input2, memSize);
-	cudaMalloc(&d_output2, memSize);
-	cudaMalloc(&gradient_h_output2, memSize);
-	cudaMalloc(&gradient_v_output2, memSize);
-
+	for (int j=1; j <= 20; j++){
+	
 	cudaEventCreate(&start_sobel);
   	cudaEventCreate(&stop_sobel);
 
 	cudaEventRecord(start_sobel, 0);
 
+	for (int i=1; i<=NIMAGES; i++){
+
+		float *image = image_array[i];
+		float *d_input = d_input_array[i];
+		float *d_output = d_output_array[i];
+		float *gradient_h_output = gradient_h_output_array[i];
+		float *gradient_v_output = gradient_v_output_array[i];
+		float* final = final_array[i];
+
 	cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
 
-	cudaMemcpy(d_input2, image2, memSize, cudaMemcpyHostToDevice);
-	
 	// printf("Launching imageBlur_horizontal \n");
-  	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
-	
-	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, WIDTH, HEIGHT);
+  	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, width, height);
 	// printf("Launching imageBlur_vertical \n");
-	cudaThreadSynchronize();
+	imageBlur_vertical << <blocks, threads >> > (d_input, d_output, width, height);
 
-	imageBlur_vertical << <blocks, threads >> > (d_input2, d_output2, WIDTH, HEIGHT);
-
-	imageBlur_vertical << <blocks, threads >> > (d_input2, d_output2, WIDTH, HEIGHT);
-  
-  	cudaThreadSynchronize();
-	
+	// printf("Copying data to device \n");
 	// printf("Launching gradient_horizontal \n");
-	gradient_horizontal<< <blocks, threads>> >(d_input, gradient_h_output, WIDTH, HEIGHT);
+	gradient_horizontal<< <blocks, threads>> >(d_input, gradient_h_output, width, height);
 	// printf("Launching gradient_vertical \n");
-	gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, WIDTH, HEIGHT);
+	gradient_vertical<< <blocks, threads>> >(d_input, gradient_v_output, width, height);
 	// printf("Launching sobelFilter \n");	
-	sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, WIDTH, HEIGHT);
+	sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, width, height);
 
-	cudaThreadSynchronize();
-
-	// printf("Launching gradient_horizontal \n");
-	gradient_horizontal<< <blocks, threads>> >(d_input2, gradient_h_output2, WIDTH, HEIGHT);
-	// printf("Launching gradient_vertical \n");
-	gradient_vertical<< <blocks, threads>> >(d_input2, gradient_v_output2, WIDTH, HEIGHT);
-	// printf("Launching sobelFilter \n");	
-	sobelFilter << <blocks, threads >> > (d_input2, d_output2, gradient_h_output2, gradient_v_output2, WIDTH, HEIGHT);
-
-	cudaThreadSynchronize();
-	
 	// printf("Copying data back to host \n");
 	cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
 
-	cudaMemcpy(final2, d_output2, memSize, cudaMemcpyDeviceToHost);
+	}
+	
+	cudaThreadSynchronize();
 
 	cudaEventRecord(stop_sobel, 0);
   	cudaEventSynchronize(stop_sobel);
   	cudaEventElapsedTime(&sobel, start_sobel, stop_sobel);
+	
+	 avg_sobel += sobel/20;
 
-	printf("Total Device Time:  %f s \n", sobel/1000);
+	}
+
+	printf("Total Avg Device Time:  %f s \n", avg_sobel/1000);
 
 	cudaError_t err = cudaGetLastError();
 	if (cudaSuccess != err)
@@ -322,29 +324,27 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Cuda error: %s: %s.\n", "Main Loop", cudaGetErrorString(err));
 		exit(EXIT_FAILURE);
 	}
+	
+	for (int i=1; i <= NIMAGES; i++){
+		float *d_input = d_input_array[i];
+		cudaFree(d_input);
+		float *d_output = d_output_array[i];
+		cudaFree(d_output);
+		float *gradient_h_output = gradient_h_output_array[i];
+		cudaFree(gradient_h_output);
+		float *gradient_v_output = gradient_v_output_array[i];
+		cudaFree(gradient_v_output);
 
-	cudaFree(d_input);
-	cudaFree(d_input);
-	cudaFree(d_output);
-	cudaFree(gradient_h_output);
-	cudaFree(gradient_v_output);
-
-	cudaFree(d_input2);
-	cudaFree(d_input2);
-	cudaFree(d_output2);
-	cudaFree(gradient_h_output2);
-	cudaFree(gradient_v_output2);
-
+		float* final = final_array[i];
+		// write image
+		pgmwrite("images/image-output_ng_apollonian_gasket.ascii.pgm", (void *)final,width, height);
+	}
  
   cudaEventRecord(stop_total, 0);
   cudaEventSynchronize(stop_total);
   cudaEventElapsedTime(&total, start_total, stop_total);
 
   printf("Total Time:  %f s \n", total/1000);
-  
-  // write image
-  pgmwrite("../images/image-output_g_apollonian_gasket.ascii.pgm", (void *)final,width, height);
-  pgmwrite("../images/image-output_g2_apollonian_gasket.ascii.pgm", (void *)final2,width, height);
     
 	cudaDeviceReset();
 	

@@ -23,7 +23,11 @@ void __syncthreads();
 
 // prototype declarations
 
+void graph_maker(cudaGraph_t graph, float* image, float* final, float* d_input, float* d_output,
+float* gradient_h_output, float* gradient_v_output, int width, int height);
+
 #define MAXLINE 128
+#define NIMAGES 128
 
 float total, sobel;
 cudaEvent_t start_total, stop_total;
@@ -203,41 +207,13 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	// pgmwrite("../images/image-output_g_512x512.pgm", (void *)final, WIDTH, HEIGHT);
 	// pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
 
+void graph_maker(cudaGraph_t* parent_graph, float* image, float* final, float* d_input, float* d_output,
+float* gradient_h_output, float* gradient_v_output, int width, int height){
 
-int main(int argc, char *argv[])
-{
-	size_t width = 600, height = 600;
-	int devID = findCudaDevice(argc, (const char **)argv);
-	float *image = NULL, *final = NULL;
+	cudaGraph_t graph = *parent_graph;
 	size_t memSize = width * height * sizeof(float);
-	checkCudaErrors((cudaMallocHost(&image, memSize)));
-	checkCudaErrors((cudaMallocHost(&final, memSize)));
 
-	// read image 
-	pgmread("../images/test_images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
-
-	cudaEventCreate(&start_total);
-	cudaEventCreate(&stop_total);
-	cudaEventRecord(start_total, 0);
-
-	int x, y;
-	float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
-
-	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
-
-	checkCudaErrors(cudaMalloc(&d_input, memSize));
-	checkCudaErrors(cudaMalloc(&d_output, memSize));
-	checkCudaErrors(cudaMalloc(&gradient_h_output, memSize));
-	checkCudaErrors(cudaMalloc(&gradient_v_output, memSize));
-
-	printf("Blocks per grid (width): %d |", (width / BLOCK_W));
-	printf("Blocks per grid (height): %d \n", (height / BLOCK_H));
-
-  	cudaGraph_t graph;
   	std::vector<cudaGraphNode_t> nodeDependencies;
-
-	checkCudaErrors(cudaGraphCreate(&graph, 0));
-
 	
 	cudaGraphNode_t memcpyNode;
 	cudaMemcpy3DParms memcpyParams = {0};
@@ -365,26 +341,84 @@ int main(int argc, char *argv[])
       cudaGraphAddMemcpyNode(&memcpyNode, graph, &kernelNode,
                              1, &memcpyParams2));
 
+	*parent_graph = graph;
+}
+
+int main(int argc, char *argv[])
+{
+	size_t width = 600, height = 600;
+	size_t memSize = width * height * sizeof(float);
+	float *image_array[NIMAGES];
+	float *final_array[NIMAGES];
+	float *d_input_array[NIMAGES];
+	float *d_output_array[NIMAGES];
+	float *gradient_h_output_array[NIMAGES];
+	float *gradient_v_output_array[NIMAGES];
+
+	cudaGraph_t graph;
+
+	checkCudaErrors(cudaGraphCreate(&graph, 0));
+
+	float avg_sobel = 0.0;
+	for (int i=1; i <= NIMAGES; i++){
+		float *image = NULL;
+		checkCudaErrors((cudaMallocHost(&image, memSize)));
+		pgmread("images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
+		image_array[i] = image;
+		
+		float *final = NULL;
+		checkCudaErrors((cudaMallocHost(&final, memSize)));
+		final_array[i] = final;
+		
+		float *d_input, *d_output, *gradient_h_output, *gradient_v_output;
+
+		checkCudaErrors(cudaMalloc(&d_input, memSize));
+		checkCudaErrors(cudaMalloc(&d_output, memSize));
+		checkCudaErrors(cudaMalloc(&gradient_h_output, memSize));
+		checkCudaErrors(cudaMalloc(&gradient_v_output, memSize));
+
+		d_input_array[i] = d_input;
+		d_output_array[i] = d_output;
+		gradient_h_output_array[i] = gradient_h_output;
+		gradient_v_output_array[i] = gradient_v_output;
+
+		graph_maker(&graph, image, final, d_input, d_output, gradient_h_output, gradient_v_output, width, height);
+	}
+
+	cudaEventCreate(&start_total);
+	cudaEventCreate(&stop_total);
+	cudaEventRecord(start_total, 0);
+
+	printf("Block size: %dx%d\n", BLOCK_W, BLOCK_H);
+
+	printf("Blocks per grid (width): %d |", (width / BLOCK_W));
+	printf("Blocks per grid (height): %d \n", (height / BLOCK_H));
 
 	checkCudaErrors(cudaGraphDebugDotPrint(graph, "mainGraph.dot", 0));
-
 
 	cudaGraphExec_t graphExec;
   	checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
 	
-	cudaEventCreate(&start_sobel);
-  	cudaEventCreate(&stop_sobel);
-
-    cudaEventRecord(start_sobel, 0);
 	
-	checkCudaErrors(cudaGraphLaunch(graphExec, 0));
-	checkCudaErrors(cudaStreamSynchronize(0));
+	for (int j=1; j <=20; j++){
 
-	cudaEventRecord(stop_sobel, 0);
-  	cudaEventSynchronize(stop_sobel);
-  	cudaEventElapsedTime(&sobel, start_sobel, stop_sobel);
+		cudaEventCreate(&start_sobel);
+  		cudaEventCreate(&stop_sobel);
 
-	printf("Device Time:  %f s \n", sobel/1000);
+    	cudaEventRecord(start_sobel, 0);
+
+		checkCudaErrors(cudaGraphLaunch(graphExec, 0));
+		checkCudaErrors(cudaStreamSynchronize(0));
+
+		cudaEventRecord(stop_sobel, 0);
+  		cudaEventSynchronize(stop_sobel);
+  		cudaEventElapsedTime(&sobel, start_sobel, stop_sobel);	
+		
+		avg_sobel += sobel/20;
+	}
+	
+
+	printf("Total Avg Device Time:  %f s \n", avg_sobel/1000);
 
 	cudaError_t err = cudaGetLastError();
 	if (cudaSuccess != err)
@@ -395,15 +429,21 @@ int main(int argc, char *argv[])
 
 	checkCudaErrors(cudaGraphExecDestroy(graphExec));
   	checkCudaErrors(cudaGraphDestroy(graph));
-	cudaFree(d_input);
-	cudaFree(d_output);
-	cudaFree(gradient_h_output);
-	cudaFree(gradient_v_output);
 
+	for (int i=1; i <= NIMAGES; i++){
+		float *d_input = d_input_array[i];
+		cudaFree(d_input);
+		float *d_output = d_output_array[i];
+		cudaFree(d_output);
+		float *gradient_h_output = gradient_h_output_array[i];
+		cudaFree(gradient_h_output);
+		float *gradient_v_output = gradient_v_output_array[i];
+		cudaFree(gradient_v_output);
 
-	// write image
-	pgmwrite("../images/test_images/image-output_g_apollonian_gasket.ascii.pgm", (void *)final,width, height);
-
+		float* final = final_array[i];
+		// write image
+		pgmwrite("images/image-output_g_apollonian_gasket.ascii.pgm", (void *)final,width, height);
+	}
    
   cudaEventRecord(stop_total, 0);
   cudaEventSynchronize(stop_total);

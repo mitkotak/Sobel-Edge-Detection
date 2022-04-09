@@ -47,25 +47,21 @@ class sobel_edge_detector:
             for j in range(kernel_width, self.image.shape[1] - kernel_width):
                 
                 x = self.image[i - kernel_width: i + kernel_width + 1, j - kernel_width: j + kernel_width + 1]
-                x = x.flatten() * self.vertical_grad_filter.flatten()
-                sum_x = x.sum()
+                x = (x.flatten() * self.vertical_grad_filter.flatten()).astype(np.int32)
+                sum_x = int(x.sum())
 
                 y = self.image[i - kernel_width: i + kernel_width + 1, j - kernel_width: j + kernel_width + 1]
-                y = y.flatten() * self.horizontal_grad_filter.flatten()
-                sum_y = y.sum()
+                y = (y.flatten() * self.horizontal_grad_filter.flatten()).astype(np.int32)
+                sum_y = int(y.sum())
         
                 grad_[i - kernel_width][j - kernel_width] = sqrt(sum_x**2 + sum_y**2)
         self.image = grad_
         return self.image
-        # loc_time = time.localtime(time.time())
-        # m = str(loc_time.tm_year) + str(loc_time.tm_mon) + str(loc_time.tm_mday) + str(loc_time.tm_hour) + str(loc_time.tm_min) + str(loc_time.tm_sec)
-        # img_save_name = 'sobel_edge_det_' + m + ".jpg"
-        # plt.imsave(img_save_name, self.image)
 
 # Load input image
-input_user = readpgm('../images/test_images/apollonian_gasket.ascii.pgm')
+input_user = readpgm('images/apollonian_gasket.ascii.pgm')
 
-user_img = np.reshape(input_user[0],input_user[1])
+user_img = np.reshape(input_user[0],input_user[1]).astype(np.int32)
 plt.imshow(user_img)
 plt.savefig("user.png")
 
@@ -114,13 +110,13 @@ plt.imshow(theoretical_img)
 
 plt.savefig("theoretical.png")
 
-input_kernel = readpgm('../images/test_images/image-output_apollonian_gasket.ascii.pgm')
+input_kernel = readpgm('images/image-output_ng_apollonian_gasket.ascii.pgm')
 kernel_ng_img = np.reshape(input_kernel[0],input_kernel[1])
 
 plt.imshow(kernel_ng_img)
 plt.savefig("kernel_ng.png")
 
-input_kernel = readpgm('../images/test_images/image-output_g_apollonian_gasket.ascii.pgm')
+input_kernel = readpgm('images/image-output_g_apollonian_gasket.ascii.pgm')
 kernel_g_img = np.reshape(input_kernel[0],input_kernel[1])
 
 plt.imshow(kernel_g_img)
