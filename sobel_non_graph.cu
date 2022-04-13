@@ -10,18 +10,18 @@ void __syncthreads();
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <cuda.h>
+#include <stdio.h> 
+#include <string.h>
+#include <list> 
 #include <helper_cuda.h>
 #include <device_functions.h>
 #include <cuda_runtime_api.h>
 #include <pgmio.h>
 #include <vector>
 
-// image dimensions WIDTH & HEIGHT
-#define NIMAGES 128
-
 // Block width WIDTH & HEIGHT
-#define BLOCK_W 10
-#define BLOCK_H 10
+#define BLOCK_W 6
+#define BLOCK_H 6
 
 // buffer to read image into
 // float image[HEIGHT][WIDTH];
@@ -219,20 +219,26 @@ __global__ void sobelFilter(float *input, float *output, float *gradient_h_outpu
 	// // pgmwrite("pgmimg-output.pgm", (void *)final, WIDTH, HEIGHT);
 
 int main(int argc, char *argv[])
-{ 	int width = 600, height=600;
+{ 	
+	FILE *fp;
+	fp=fopen("test/benchmark_non_graph.csv","w+");
+	fprintf(fp,"Nimages, Time\n");
+	std::list<int> nimage_list = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024 };
+	for (int nimage : nimage_list){
 
+	int width = 300, height=246;
 	size_t memSize = width * height * sizeof(float);
-	float *image_array[NIMAGES];
-	float *final_array[NIMAGES];
-	float *d_input_array[NIMAGES];
-	float *d_output_array[NIMAGES];
-	float *gradient_h_output_array[NIMAGES];
-	float *gradient_v_output_array[NIMAGES];
+	float *image_array[nimage];
+	float *final_array[nimage];
+	float *d_input_array[nimage];
+	float *d_output_array[nimage];
+	float *gradient_h_output_array[nimage];
+	float *gradient_v_output_array[nimage];
 
-	for (int i=1; i <= NIMAGES; i++){
+	for (int i=1; i <= nimage; i++){
 		float *image = NULL;
 		checkCudaErrors((cudaMallocHost(&image, memSize)));
-		pgmread("images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
+		pgmread("images/coins.ascii.pgm", (void *)image, width, height);
 		image_array[i] = image;
 		
 		float *final = NULL;
@@ -277,7 +283,7 @@ int main(int argc, char *argv[])
 
 	cudaEventRecord(start_sobel, 0);
 
-	for (int i=1; i<=NIMAGES; i++){
+	for (int i=1; i<=nimage; i++){
 
 		float *image = image_array[i];
 		float *d_input = d_input_array[i];
@@ -318,6 +324,8 @@ int main(int argc, char *argv[])
 
 	printf("Total Avg Device Time:  %f s \n", avg_sobel/1000);
 
+	fprintf(fp,"%d,%f\n", nimage, avg_sobel/1000);
+
 	cudaError_t err = cudaGetLastError();
 	if (cudaSuccess != err)
 	{
@@ -325,7 +333,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 	
-	for (int i=1; i <= NIMAGES; i++){
+	for (int i=1; i <= nimage; i++){
 		float *d_input = d_input_array[i];
 		cudaFree(d_input);
 		float *d_output = d_output_array[i];
@@ -337,7 +345,7 @@ int main(int argc, char *argv[])
 
 		float* final = final_array[i];
 		// write image
-		pgmwrite("images/image-output_ng_apollonian_gasket.ascii.pgm", (void *)final,width, height);
+		pgmwrite("images/image-output_ng_coins.ascii.pgm", (void *)final,width, height);
 	}
  
   cudaEventRecord(stop_total, 0);
@@ -345,7 +353,8 @@ int main(int argc, char *argv[])
   cudaEventElapsedTime(&total, start_total, stop_total);
 
   printf("Total Time:  %f s \n", total/1000);
-    
+
+	}
 	cudaDeviceReset();
 	
 	return 0;
