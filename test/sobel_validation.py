@@ -59,11 +59,10 @@ class sobel_edge_detector:
         return self.image
 
 
-width = 600
-height = 600
 # Load input image
-input_user = readpgm('images/apollonian_gasket.ascii.pgm')
+input_user = readpgm('images/coins.ascii.pgm')
 user_img = np.reshape(input_user[0],input_user[1])
+width,height = user_img.shape
 G = user_img.copy()
 
 plt.imshow(user_img)
@@ -147,13 +146,13 @@ theoretical_img = G
 plt.imshow(theoretical_img)
 plt.savefig("theoretical.png")
 
-input_kernel = readpgm('images/image-output_ng_apollonian_gasket.ascii.pgm')
+input_kernel = readpgm('images/image-output_ng_coins.ascii.pgm')
 kernel_ng_img = np.reshape(input_kernel[0],input_kernel[1])
 
 plt.imshow(kernel_ng_img)
 plt.savefig("kernel_ng.png")
 
-input_kernel = readpgm('images/image-output_g_apollonian_gasket.ascii.pgm')
+input_kernel = readpgm('images/image-output_g_coins.ascii.pgm')
 kernel_g_img = np.reshape(input_kernel[0],input_kernel[1])
 
 plt.imshow(kernel_g_img)

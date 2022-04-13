@@ -9,10 +9,10 @@ sobel_non_graph: compile_sobel_non_graph
 	./a_non_graph
 
 compile_sobel_graph: sobel_graph.cu
-	nvcc -g -G sobel_graph.cu -o a_graph
+	nvcc -I${PWD} -g -G sobel_graph.cu -o a_graph
 
 compile_sobel_non_graph: sobel_non_graph.cu
-	nvcc -g -G sobel_non_graph.cu -o a_non_graph
+	nvcc -I${PWD} -g -G sobel_non_graph.cu -o a_non_graph
 
 benchmark_py: test/benchmark.py
 	python3 test/benchmark.py
