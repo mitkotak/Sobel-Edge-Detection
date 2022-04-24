@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
 	std::list<int> nimage_list = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024 };
 	for (int nimage : nimage_list){
 
-	int width = 300, height=246;
+	int width = 600, height=600;
 	size_t memSize = width * height * sizeof(float);
 	float *image_array[nimage];
 	float *final_array[nimage];
@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
 	for (int i=1; i <= nimage; i++){
 		float *image = NULL;
 		checkCudaErrors((cudaMallocHost(&image, memSize)));
-		pgmread("images/coins.ascii.pgm", (void *)image, width, height);
+		pgmread("images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
 		image_array[i] = image;
 		
 		float *final = NULL;
@@ -277,11 +277,6 @@ int main(int argc, char *argv[])
 	float avg_sobel = 0.0;
 
 	for (int j=1; j <= 20; j++){
-	
-	cudaEventCreate(&start_sobel);
-  	cudaEventCreate(&stop_sobel);
-
-	cudaEventRecord(start_sobel, 0);
 
 	for (int i=1; i<=nimage; i++){
 
@@ -293,7 +288,11 @@ int main(int argc, char *argv[])
 		float* final = final_array[i];
 
 	cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
+	
+	cudaEventCreate(&start_sobel);
+  	cudaEventCreate(&stop_sobel);
 
+	cudaEventRecord(start_sobel, 0);
 	// printf("Launching imageBlur_horizontal \n");
   	imageBlur_horizontal << <blocks, threads >> > (d_input, d_output, width, height);
 	// printf("Launching imageBlur_vertical \n");
@@ -307,19 +306,18 @@ int main(int argc, char *argv[])
 	// printf("Launching sobelFilter \n");	
 	sobelFilter << <blocks, threads >> > (d_input, d_output, gradient_h_output, gradient_v_output, width, height);
 
+	cudaEventRecord(stop_sobel, 0);
+  	cudaEventSynchronize(stop_sobel);
+  	cudaEventElapsedTime(&sobel, start_sobel, stop_sobel);
+	avg_sobel += sobel/20;
+
 	// printf("Copying data back to host \n");
 	cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
 
 	}
 	
 	cudaThreadSynchronize();
-
-	cudaEventRecord(stop_sobel, 0);
-  	cudaEventSynchronize(stop_sobel);
-  	cudaEventElapsedTime(&sobel, start_sobel, stop_sobel);
 	
-	 avg_sobel += sobel/20;
-
 	}
 
 	printf("Total Avg Device Time:  %f s \n", avg_sobel/1000);
@@ -345,7 +343,7 @@ int main(int argc, char *argv[])
 
 		float* final = final_array[i];
 		// write image
-		pgmwrite("images/image-output_ng_coins.ascii.pgm", (void *)final,width, height);
+		pgmwrite("images/image-output_ng_apollonian_gasket.ascii.pgm", (void *)final,width, height);
 	}
  
   cudaEventRecord(stop_total, 0);

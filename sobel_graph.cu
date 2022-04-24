@@ -216,24 +216,25 @@ float* gradient_h_output, float* gradient_v_output, int width, int height){
 	size_t memSize = width * height * sizeof(float);
 
   	std::vector<cudaGraphNode_t> nodeDependencies;
+	std::vector<cudaGraphNode_t> nodeDependencies2;
 	
-	cudaGraphNode_t memcpyNode;
-	cudaMemcpy3DParms memcpyParams = {0};
+	// cudaGraphNode_t memcpyNode;
+	// cudaMemcpy3DParms memcpyParams = {0};
 
-	memcpyParams.srcArray = NULL;
-  	memcpyParams.srcPos = make_cudaPos(0, 0, 0);
-  	memcpyParams.srcPtr =
-      make_cudaPitchedPtr(image, memSize, 1, 1);
-  	memcpyParams.dstArray = NULL;
-  	memcpyParams.dstPos = make_cudaPos(0, 0, 0);
-  	memcpyParams.dstPtr =
-      make_cudaPitchedPtr(d_input, memSize, 1, 1);
-  	memcpyParams.extent = make_cudaExtent(memSize, 1, 1);
-  	memcpyParams.kind = cudaMemcpyHostToDevice;
+	// memcpyParams.srcArray = NULL;
+  	// memcpyParams.srcPos = make_cudaPos(0, 0, 0);
+  	// memcpyParams.srcPtr =
+    //   make_cudaPitchedPtr(image, memSize, 1, 1);
+  	// memcpyParams.dstArray = NULL;
+  	// memcpyParams.dstPos = make_cudaPos(0, 0, 0);
+  	// memcpyParams.dstPtr =
+    //   make_cudaPitchedPtr(d_input, memSize, 1, 1);
+  	// memcpyParams.extent = make_cudaExtent(memSize, 1, 1);
+  	// memcpyParams.kind = cudaMemcpyHostToDevice;
 
-	checkCudaErrors(
-      cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
-	nodeDependencies.push_back(memcpyNode);
+	// checkCudaErrors(
+    //   cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
+	// nodeDependencies.push_back(memcpyNode);
 
 
 	dim3 threads(BLOCK_W, BLOCK_H); // threads per block
@@ -252,11 +253,10 @@ float* gradient_h_output, float* gradient_v_output, int width, int height){
 
 
 	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, &memcpyNode,
-                             1, &kernelNodeParams));
+    cudaGraphAddKernelNode(&kernelNode, graph, NULL,
+                             0, &kernelNodeParams));
 
-  	nodeDependencies.clear();
-  	nodeDependencies.push_back(kernelNode);
+  	nodeDependencies2.push_back(kernelNode);
   
 
 	cudaKernelNodeParams kernelNodeParams1 = {0};
@@ -269,15 +269,10 @@ float* gradient_h_output, float* gradient_v_output, int width, int height){
  	kernelNodeParams1.extra = NULL;
 
 	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, &memcpyNode,
-                             1, &kernelNodeParams1));
+    cudaGraphAddKernelNode(&kernelNode, graph, NULL,
+                             0, &kernelNodeParams1));
 
-  	nodeDependencies.push_back(kernelNode);
-
-	cudaGraphNode_t empty_node;
-	checkCudaErrors(
-      cudaGraphAddEmptyNode(&empty_node, graph, nodeDependencies.data(),
-                             nodeDependencies.size()));
+  	nodeDependencies2.push_back(kernelNode);
 
 
 	cudaKernelNodeParams kernelNodeParams2 = {0};
@@ -290,10 +285,9 @@ float* gradient_h_output, float* gradient_v_output, int width, int height){
  	kernelNodeParams2.extra = NULL;
 
 	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, &empty_node,
-                             1, &kernelNodeParams2));
+    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies2.data(),
+                             nodeDependencies2.size(), &kernelNodeParams2));
 
-  	nodeDependencies.clear();
   	nodeDependencies.push_back(kernelNode);
 	
 	cudaKernelNodeParams kernelNodeParams3 = {0};
@@ -306,8 +300,8 @@ float* gradient_h_output, float* gradient_v_output, int width, int height){
  	kernelNodeParams3.extra = NULL;
 
 	checkCudaErrors(
-    cudaGraphAddKernelNode(&kernelNode, graph, &empty_node,
-                             1, &kernelNodeParams3));
+    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies2.data(),
+                             nodeDependencies2.size(), &kernelNodeParams3));
 
   	nodeDependencies.push_back(kernelNode);
 
@@ -328,20 +322,20 @@ float* gradient_h_output, float* gradient_v_output, int width, int height){
   	nodeDependencies.clear();
   	nodeDependencies.push_back(kernelNode);
 
-	cudaThreadSynchronize();
-	cudaMemcpy3DParms memcpyParams2 = {0};
-	memcpyParams2.srcArray = NULL;
-	memcpyParams2.srcPos = make_cudaPos(0, 0, 0);
-	memcpyParams2.srcPtr = make_cudaPitchedPtr(d_output, memSize, 1, 1);
-	memcpyParams2.dstArray = NULL;
-	memcpyParams2.dstPos = make_cudaPos(0, 0, 0);
-	memcpyParams2.dstPtr = make_cudaPitchedPtr(final, memSize, 1, 1);
-	memcpyParams2.extent = make_cudaExtent(memSize, 1, 1);
-	memcpyParams2.kind = cudaMemcpyDeviceToHost;
+	// cudaThreadSynchronize();
+	// cudaMemcpy3DParms memcpyParams2 = {0};
+	// memcpyParams2.srcArray = NULL;
+	// memcpyParams2.srcPos = make_cudaPos(0, 0, 0);
+	// memcpyParams2.srcPtr = make_cudaPitchedPtr(d_output, memSize, 1, 1);
+	// memcpyParams2.dstArray = NULL;
+	// memcpyParams2.dstPos = make_cudaPos(0, 0, 0);
+	// memcpyParams2.dstPtr = make_cudaPitchedPtr(final, memSize, 1, 1);
+	// memcpyParams2.extent = make_cudaExtent(memSize, 1, 1);
+	// memcpyParams2.kind = cudaMemcpyDeviceToHost;
 
-	checkCudaErrors(
-      cudaGraphAddMemcpyNode(&memcpyNode, graph, &kernelNode,
-                             1, &memcpyParams2));
+	// checkCudaErrors(
+    //   cudaGraphAddMemcpyNode(&memcpyNode, graph, &kernelNode,
+    //                          1, &memcpyParams2));
 
 	*parent_graph = graph;
 }
@@ -352,11 +346,11 @@ int main(int argc, char *argv[])
 	fprintf(fp,"Nimages, Time\n");
 
 	std::list<int> nimage_list = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024 };
-	
+	// std::list<int> nimage_list = {4};
 	for (int nimage : nimage_list){
 		float avg_sobel = 0.0;
 
-		size_t width = 300, height = 246;
+		size_t width = 600, height = 600;
 		size_t memSize = width * height * sizeof(float);
 		float *image_array[nimage];
 		float *final_array[nimage];
@@ -372,7 +366,7 @@ int main(int argc, char *argv[])
 		for (int i=1; i <= nimage; i++){
 		float *image = NULL;
 		checkCudaErrors((cudaMallocHost(&image, memSize)));
-		pgmread("images/coins.ascii.pgm", (void *)image, width, height);
+		pgmread("images/apollonian_gasket.ascii.pgm", (void *)image, width, height);
 		image_array[i] = image;
 		
 		float *final = NULL;
@@ -390,7 +384,7 @@ int main(int argc, char *argv[])
 		d_output_array[i] = d_output;
 		gradient_h_output_array[i] = gradient_h_output;
 		gradient_v_output_array[i] = gradient_v_output;
-
+		cudaMemcpy(d_input, image, memSize, cudaMemcpyHostToDevice);
 		graph_maker(&graph, image, final, d_input, d_output, gradient_h_output, gradient_v_output, width, height);
 	}
 
@@ -442,18 +436,19 @@ int main(int argc, char *argv[])
   	checkCudaErrors(cudaGraphDestroy(graph));
 
 	for (int i=1; i <= nimage; i++){
+		float *d_output = d_output_array[i];
+		float* final = final_array[i];
+		cudaMemcpy(final, d_output, memSize, cudaMemcpyDeviceToHost);
 		float *d_input = d_input_array[i];
 		cudaFree(d_input);
-		float *d_output = d_output_array[i];
 		cudaFree(d_output);
 		float *gradient_h_output = gradient_h_output_array[i];
 		cudaFree(gradient_h_output);
 		float *gradient_v_output = gradient_v_output_array[i];
 		cudaFree(gradient_v_output);
 
-		float* final = final_array[i];
 		// write image
-		pgmwrite("images/image-output_g_coins.ascii.pgm", (void *)final,width, height);
+		pgmwrite("images/image-output_g_apollonian_gasket.ascii.pgm", (void *)final,width, height);
 	}
    
   cudaEventRecord(stop_total, 0);
